@@ -1,0 +1,104 @@
+---
+title: "Powerpoint_RNA"
+author: "Chelsea Dack"
+date: "24/11/2020"
+output: 
+  bookdown::pdf_document2: default
+  bookdown::word_document2: default
+  bookdown::html_document2: default
+---
+
+<!-- set default code chunk options -->
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, 
+                      warning = FALSE,
+                      message = FALSE,
+                      fig.retina = 3)
+# echo = FALSE means code will not be included in output
+# warning = FALSE & message = FALSE means R warnings & messages not included
+# fig.retina = 3 improves figure appearance in HTML documents
+```
+
+<!-- insert code chunk for package loading -->
+```{r packages}
+library(tidyverse)
+library(Rtsne)
+```
+
+# Introduction
+Single-cell RNASeq data where aach row is a cell (an observation) and each column is a gene (a variable / feature). The values are gene expression values.
+
+# Methods
+```{r import}
+file <- "data-raw/scrna_data.csv"
+rna <- read_csv(file)
+```
+The expression of 1838 genes has been measured for 2638 cells.
+
+```{r pca}
+# carry out PCA
+pca <- rna %>% 
+  prcomp(scale. = TRUE)
+
+# Consider the variance in the first ten PC
+summary(pca)[["importance"]][,1:10]
+# The amount of variation in the first 10 components combined is still quite small (6.49%)
+# but as there are 1838 variables, perhaps not that small. There is 20.71% in the first 100
+```
+
+```{r pca plot}
+# Put PC scores in data frame
+dat <-  data.frame(pca$x)
+
+# Plot PC1 against PC2
+ggplot(dat, aes(x = PC1, y = PC2)) +
+  geom_point()
+
+# Since the first two components don't capture much of the variation in the cells, it's worth looking at some other pairwise comparisons
+# Any two will still only capture a small amount of variance but clusters may be seen better in some comparisons than others
+
+# Select the first 10 PCs and pipe in to ggpairs()
+dat %>%
+  select(PC1:PC10) %>% 
+  ggpairs()
+```
+
+```{r tsne}
+# Will t-SNE visualise different cell types more effectively?
+
+# Perform t-SNE with the Rtsne() function
+tsne <- rna %>% 
+  Rtsne(perplexity = 40,
+        check_duplicates = FALSE)
+# stochastic method so results will differ each time run it even if the arguments are the same
+# perplexity is one of the arguments that can be altered - its a smoothing of the number of neighbours
+```
+
+```{r tsne plot}
+# Put the t-SNE scores in a dataframe
+dat <- data.frame(tsne$Y)
+
+# Plot the first t-SNE dimension against the second
+dat %>% ggplot(aes(x = X1, y = X2)) +
+  geom_point(size=0.5)
+
+# A cluster analysis (a different unsupervised method) has been performed on these data and the cell types identified and verified by mapping the expression of markers on the clusters
+# We can import this labelling and colour our t-SNE plot by cell type
+
+# Import metadata
+file <- "data-raw/scrna_meta.csv"
+meta <- read_csv(file)
+# There is a row for every cell and one of the columns louvain, gives the cell types. Louvain is the name of the clustering algorithm that was used
+
+# There are 8 cell types 
+unique(meta$louvain)
+
+# Add the cell type to the t-SNE scores dataframe
+dat <- data.frame(dat, type = meta$louvain)
+
+# Replot the t*-SNE scores coloured by cell type
+dat %>% ggplot(aes(x = X1, y = X2, colour = type)) +
+  geom_point(size = 0.5)
+
+```
+

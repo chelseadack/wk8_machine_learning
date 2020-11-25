@@ -1,0 +1,105 @@
+---
+title: "workshop task 2"
+author: "Chelsea Dack"
+date: "25/11/2020"
+output:
+  bookdown::html_document2: default
+  bookdown::pdf_document2: default
+  bookdown::word_document2: default
+---
+
+<!-- set default code chunk options -->
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, 
+                      warning = FALSE,
+                      message = FALSE,
+                      fig.retina = 3)
+# echo = FALSE means code will not be included in output
+# warning = FALSE & message = FALSE means R warnings & messages not included
+# fig.retina = 3 improves figure appearance in HTML documents
+```
+
+<!-- insert code chunk for package loading -->
+```{r packages}
+library(tidyverse)
+library(Rtsne)
+library(bookdown)
+```
+
+# Introduction
+Continue work on the Case study of the proteomic data from five immortalised mesenchymal stromal cell (MSC) lines. That was covered in Week 5. Data are organised with samples in columns and proteins in rows.
+
+# Methods
+
+Import:
+```{r import}
+file <- "data-raw/sol.txt"
+sol <- read_table2(file)
+names(sol)
+```
+
+We can see that the genename is in the first column.
+
+In order use the genes as variables and the samples as observations, we will need to transpose all the values except the genename:
+```{r tidy}
+# transpose
+tsol <- sol %>% 
+  select(-genename) %>% 
+  t() %>% 
+  data.frame()
+
+ # Use the genenames in `sol` to name the columns in `tsol`:
+names(tsol) <- sol$genename
+
+# The column names of `sol` have become the row names of `tsol`. Add a column for these.
+tsol$sample <- row.names(tsol)
+
+# process the sample name so have the cell lineage in one column and the replicate in another
+tsol <- tsol %>% 
+  extract(sample, 
+          c("lineage","rep"),
+          "(Y[0-9]{3,4})\\_([A-C])")
+```
+
+# Results
+
+Now PCA:
+
+```{r pca}
+pca <- tsol %>% 
+  select(-lineage, -rep) %>%
+  prcomp(scale. = TRUE)
+
+# To see the variance accounted for by each component
+summary(pca)
+# nearly 82% variation is captured in the first six components.
+
+# looking at the loadings when there are very many variables (861 in this case) is usually not that helpful
+```
+
+```{r pca plot}
+# To plot, we might want to use the scores on each of the new axes and colour them by species. The scores are in a variable called $x
+# For convenience, put these in one 'tidy' dataframe
+pca_labelled <- data.frame(pca$x, lineage = tsol$lineage)
+# a then to do a scatterplot
+ggplot(pca_labelled, aes(x = PC1, y = PC2, color = lineage)) +
+  geom_point()
+```
+
+Now t-SNE:
+
+```{r tsne}
+# because there are very few observations, perplexity must be very low
+tsne <- tsol %>% 
+  select(-lineage, -rep) %>%
+  Rtsne(perplexity = 4,
+        check_duplicates = FALSE)
+
+dat <- data.frame(tsne$Y,  lineage = tsol$lineage)
+
+dat %>% ggplot(aes(x = X1, y = X2, colour = lineage)) +
+  geom_point()
+
+```
+
+A consistent message of 101.5 being distinctly different is has emerged.

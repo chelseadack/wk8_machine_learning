@@ -1,0 +1,104 @@
+---
+title: "Powerpoint - penguins"
+author: "Chelsea Dack"
+date: "24/11/2020"
+output:
+  bookdown::pdf_document2: default
+  bookdown::word_document2: default
+  bookdown::html_document2: default
+---
+
+<!-- set default code chunk options -->
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, 
+                      warning = FALSE,
+                      message = FALSE,
+                      fig.retina = 3)
+# echo = FALSE means code will not be included in output
+# warning = FALSE & message = FALSE means R warnings & messages not included
+# fig.retina = 3 improves figure appearance in HTML documents
+```
+
+<!-- insert code chunk for package loading -->
+```{r packages}
+library(tidyverse)
+library(palmerpenguins)
+library(GGally)
+```
+
+# Background
+The Palmer penguins data contains size measurements for three penguin species observed on three islands in the Palmer Archipelago, Antarctica.
+Introduction to palmerpenguins - https://allisonhorst.github.io/palmerpenguins/articles/intro.html
+
+# Methods
+Variables found here - https://allisonhorst.github.io/palmerpenguins/articles/intro.html
+
+```{r tidy}
+# clean variable names
+penguin <- penguins_raw %>%
+  janitor::clean_names()
+# do str(penguins_raw) if want to see original names
+
+# view variables we will use to see if any NAs
+penguin %>% 
+  select(body_mass_g,
+         ends_with("_mm")) %>% 
+  summary()
+
+# filter out rows with missing values (then check any NAs again)
+penguin <- penguin %>% 
+  filter(!is.na(body_mass_g))
+
+# split species into common_name & scientific_name
+penguin <- penguin %>% 
+  extract(species, 
+          c("common_name", "scientific_name"),
+          "([a-zA-Z]+\\s[a-zA-Z]+)\\s\\(([a-zA-Z]+\\s[a-zA-Z]+)\\)")
+```
+
+# Results
+```{r explore}
+# select variables of interest & pipe into ggpairs()
+#outputs a matrix of pairwise plots of the variables
+penguin %>%
+  select(common_name, 
+         sex, 
+         island,
+         body_mass_g,
+         ends_with("_mm")) %>%
+  ggpairs(aes(color = common_name))
+```
+
+```{r pca}
+# select the variables & pipe into prcomp()
+pca <- penguin %>% 
+  select(body_mass_g,
+         ends_with("_mm")) %>%
+  prcomp(scale. = TRUE)
+# scaling prevents variables with biggest values dominating analysis
+
+# see the variance accounted for by each component
+summary(pca)
+# 68.844% of the variation is captured in the first PC; 88.157% in the first 2 together.
+
+# See the importance (loadings) of each variable in each component
+pca$rotation
+# PC1 = linear combination of the original variable
+```
+
+```{r pca plot}
+# To plot, we might want to use the scores on each of the new axes and colour them by species. The scores are in a variable called $x
+
+# Extract the scores into a dataframe with the species names
+pca_labelled <- data.frame(pca$x, common_name = penguin$common_name)
+# then to do a scatterplot
+pca_labelled %>% 
+  ggplot(aes(x = PC1, y = PC2, color = common_name)) +
+  geom_point()
+
+# Our species separate a little better on the first two PC than any pairwise comparison
+# coloured our observations by species but PCA is an unsupervised method because PCA itself takes no account of the species in creating the PCs
+
+```
+
+
