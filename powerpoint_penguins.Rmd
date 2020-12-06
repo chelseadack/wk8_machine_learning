@@ -3,9 +3,9 @@ title: "Powerpoint - penguins"
 author: "Chelsea Dack"
 date: "24/11/2020"
 output:
-  bookdown::pdf_document2: default
-  bookdown::word_document2: default
   bookdown::html_document2: default
+  bookdown::word_document2: default
+  bookdown::pdf_document2: default
 ---
 
 <!-- set default code chunk options -->
@@ -24,6 +24,7 @@ knitr::opts_chunk$set(echo = FALSE,
 library(tidyverse)
 library(palmerpenguins)
 library(GGally)
+library(caret)
 ```
 
 # Background
@@ -32,6 +33,7 @@ Introduction to palmerpenguins - https://allisonhorst.github.io/palmerpenguins/a
 
 # Methods
 Variables found here - https://allisonhorst.github.io/palmerpenguins/articles/intro.html
+Tidy data & remove NAs
 
 ```{r tidy}
 # clean variable names
@@ -57,6 +59,9 @@ penguin <- penguin %>%
 ```
 
 # Results
+
+Explore data:
+
 ```{r explore}
 # select variables of interest & pipe into ggpairs()
 #outputs a matrix of pairwise plots of the variables
@@ -69,6 +74,8 @@ penguin %>%
   ggpairs(aes(color = common_name))
 ```
 
+## PCA of data
+- 68.844% of the variation is captured in the first PC; 88.157% in the first 2 together.
 ```{r pca}
 # select the variables & pipe into prcomp()
 pca <- penguin %>% 
@@ -79,12 +86,14 @@ pca <- penguin %>%
 
 # see the variance accounted for by each component
 summary(pca)
-# 68.844% of the variation is captured in the first PC; 88.157% in the first 2 together.
 
 # See the importance (loadings) of each variable in each component
 pca$rotation
 # PC1 = linear combination of the original variable
 ```
+
+Our species separate a little better on the first two PC than any pairwise comparison.
+Coloured observations by species but PCA is an unsupervised method because PCA itself takes no account of the species in creating the PCs
 
 ```{r pca plot}
 # To plot, we might want to use the scores on each of the new axes and colour them by species. The scores are in a variable called $x
@@ -96,9 +105,91 @@ pca_labelled %>%
   ggplot(aes(x = PC1, y = PC2, color = common_name)) +
   geom_point()
 
-# Our species separate a little better on the first two PC than any pairwise comparison
-# coloured our observations by species but PCA is an unsupervised method because PCA itself takes no account of the species in creating the PCs
-
 ```
 
+## LDA of data
+
+```{r lda}
+# Select the four variables and pipe into the MASS::lda() function which does the LDA
+lda <- penguin %>% 
+  select(body_mass_g,
+         ends_with("_mm")) %>%
+  MASS::lda(grouping = penguin$common_name)
+
+# View the importance of each variable in each discriminant
+lda$scaling
+
+# Select the variables from Penguin that are in the model and predict the species from the lda model object
+plda <- penguin %>% 
+  select(body_mass_g,
+         ends_with("_mm")) %>%
+  predict(object = lda)
+```
+
+Caret provides us with a useful function to examine the confusion matrix. A confusion matrix is a table that tells us about the performance of a classification model. The table gives the number of:
+- correct predictions: the species predicted matches the observed species
+- incorrect predictions: the species predicted does not match the observed species
+
+The confusionMatrix() function also outputs:
+- Accuracy - No. correct predictions / No. of observations
+- 95% CI - 95 percent confidence interval on the accuracy (using binom.test())
+- No Information Rate - No. observations in the largest class / Number of observations
+- P-Value [Acc > NIR] - Is the model significantly better than than you could do by always predicting the most common class (again using binom.test()).
+
+```{r matrix}
+# examine confusion matrix
+confusionMatrix(plda$class, factor(penguin$common_name))
+```
+
+The model had an accuracy of 98.8304%. There were 151 Adelie Penguins of which 1 were predicted incorrectly; 68 Chinstrap Penguins of which 3 were predicted incorrectly; and 123 Gentoo Penguins of which 0 were predicted incorrectly.
+
+```{r lda plot}
+# Extract the scores into a dataframe with the species names
+lda_labelled <- data.frame(plda$x,
+                              common_name = penguin$common_name)
+
+# Create a scatter plot
+lda_labelled %>% 
+  ggplot(aes(x = LD1, y = LD2, color = common_name)) +
+  geom_point()
+```
+
+The separation between species is stronger in the LDA than in the PCA.
+
+## LDA with training
+
+Can use the caret function createDataPartition() to split the dataset in to training and testing sets, to avoid overfitting. It returns a proportion of row numbers randomly sampled from the dataframe.
+
+```{r sets}
+# Create a vector of row numbers that will be used to split the dataset in to training and testing sets
+ids <- createDataPartition(y = penguin$common_name,
+                           p = 0.75,
+                           list = FALSE)
+# p is the proportion of rows to sample.
+# list = FALSE gives a vector of numbers rather than a one item list.
+
+# use those row numbers to select the rows from penguin to create the training and test datasets. We use the dplyr function slice which works like the filter function but filters rows on their index rather than a match to a condition
+train <- penguin %>% slice(ids)
+test <- penguin %>% slice(-ids)
+```
+
+```{r lda2}
+# Perform the LDA on the training data
+lda <- train %>%
+  select(body_mass_g,
+         ends_with("_mm")) %>%
+  MASS::lda(grouping = train$common_name)
+
+# predict classes of the test data based on lda model
+plda <- test %>%
+  select(body_mass_g,
+         ends_with("_mm")) %>%
+  predict(object = lda)
+```
+
+```{r matrix2}
+# Examining the confusion matrix
+confusionMatrix(plda$class,factor(test$common_name))
+
+```
 

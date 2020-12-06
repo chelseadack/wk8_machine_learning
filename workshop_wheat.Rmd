@@ -104,3 +104,33 @@ dat <- data.frame(tsne$Y,  species = seeds$species)
 dat %>% ggplot(aes(x = X1, y = X2, colour = species)) +
   geom_point()
 ```
+
+Can apply LDA to this dataset to determine how well you can predict the species from the seed metrics and how robust or generalisable your predictions are.
+
+```{r split data}
+# randomly select row numbers for the training set
+ids <- createDataPartition(y = seeds$species,
+                           p = 0.75,
+                           list = FALSE)
+# subset training and testing data based on that random row selection
+train <- seeds %>% slice(ids)
+test <- seeds %>% slice(-ids)
+```
+
+```{r lda}
+lda <- train %>% 
+  select(-species) %>%
+  MASS::lda(grouping = train$species)
+```
+
+```{r seed-lda-predict-on-test}
+plda <- test %>% 
+  select(-species) %>%
+  predict(object = lda)
+```
+
+```{r seed-lda-confusion}
+confusionMatrix(plda$class, factor(test$species))
+```
+
+The model had 92 % accuracy.

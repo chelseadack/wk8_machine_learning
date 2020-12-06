@@ -3,9 +3,9 @@ title: "Powerpoint_RNA"
 author: "Chelsea Dack"
 date: "24/11/2020"
 output: 
-  bookdown::pdf_document2: default
-  bookdown::word_document2: default
   bookdown::html_document2: default
+  bookdown::word_document2: default
+  bookdown::pdf_document2: default
 ---
 
 <!-- set default code chunk options -->
@@ -23,6 +23,8 @@ knitr::opts_chunk$set(echo = FALSE,
 ```{r packages}
 library(tidyverse)
 library(Rtsne)
+library(caret)
+library(GGally)
 ```
 
 # Introduction
@@ -34,6 +36,10 @@ file <- "data-raw/scrna_data.csv"
 rna <- read_csv(file)
 ```
 The expression of 1838 genes has been measured for 2638 cells.
+
+# Results
+
+## PCA of data
 
 ```{r pca}
 # carry out PCA
@@ -53,15 +59,18 @@ dat <-  data.frame(pca$x)
 # Plot PC1 against PC2
 ggplot(dat, aes(x = PC1, y = PC2)) +
   geom_point()
+```
 
-# Since the first two components don't capture much of the variation in the cells, it's worth looking at some other pairwise comparisons
-# Any two will still only capture a small amount of variance but clusters may be seen better in some comparisons than others
+Since the first two components don't capture much of the variation in the cells, it's worth looking at some other pairwise comparisons. Any two will still only capture a small amount of variance but clusters may be seen better in some comparisons than others.
 
+```{r ggpairs}
 # Select the first 10 PCs and pipe in to ggpairs()
 dat %>%
   select(PC1:PC10) %>% 
   ggpairs()
 ```
+
+## t-SNE of data
 
 ```{r tsne}
 # Will t-SNE visualise different cell types more effectively?
@@ -93,6 +102,9 @@ meta <- read_csv(file)
 # There are 8 cell types 
 unique(meta$louvain)
 
+# Add the cell labels to the data
+rna$cell <- meta$louvain
+
 # Add the cell type to the t-SNE scores dataframe
 dat <- data.frame(dat, type = meta$louvain)
 
@@ -100,5 +112,91 @@ dat <- data.frame(dat, type = meta$louvain)
 dat %>% ggplot(aes(x = X1, y = X2, colour = type)) +
   geom_point(size = 0.5)
 
+```
+
+## LDA of data
+
+```{r sets}
+# Split the dataset in to training and testing sets using createDataPartition()
+ids <- createDataPartition(y = rna$cell,
+                           p = 0.75,
+                           list = FALSE)
+
+# Create the training set
+train <- rna %>% slice(ids)
+
+# Create the testing set
+test <- rna %>% slice(-ids)
+```
+
+```{r lda}
+# Perform the LDA on the training data
+lda <- train %>% 
+  select(-cell) %>%
+  MASS::lda(grouping = train$cell)
+
+# Predict on the training data
+plda_train <- train %>% 
+  select(-cell) %>%
+  predict(object = lda)
+
+# Examining the confusion matrix
+confusionMatrix(plda_train$class,factor(train$cell))
+```
+
+Model had 100% accuracy. But what about performance on the test set? Is our modelling overftting? Would it be equally good on the scRNASeq data for a new dataset?
+
+```{r lda test}
+# Predict classes of the test data based on LDA model
+plda_test <- test %>% 
+  select(-cell) %>%
+  predict(object = lda)
+
+# Examining the confusion matrix
+confusionMatrix(plda_test$class, factor(test$cell))
+```
+
+The model had 67% accuracy.
+
+```{r lda plot train}
+# Extract the scores from the training set with the cell names
+lda_labelled_train <- data.frame(plda_train$x,
+                              cell = train$cell)
+
+# Extract the scores from the training set with the cell names
+lda_labelled_test <- data.frame(plda_test$x,
+                              cell = test$cell)
+
+# Create a scatter plot for the training data
+lda_labelled_train %>% 
+  ggplot(aes(x = LD1, y = LD2, color = cell)) +
+  geom_point()
+```
+
+Based on this plot, you might be surprised by the accuracy of the model predictions on the training set - there seems to be a lot of overlap. However, you are only looking at LD1 and LD2. There are many dimensions in this dataset and the separation of groups might not be obvious from the first to LD. GGally (Schloerke Cook, et al., 2020) can let us examine several pairwise LD comparisons.
+
+```{r ggally}
+# Select the first 5 LDs and pipe in to ggpairs()
+lda_labelled_train %>% 
+  select(LD1:LD5, cell) %>% 
+  ggpairs(aes(color = cell))
+```
+
+See how LD1 really separates Megakaryocytes from the other cell types but that other LD are needed to distinguish all the cell types.
+
+```{r lda plot test}
+# Create a scatter plot for the test data
+lda_labelled_test %>% 
+  ggplot(aes(x = LD1, y = LD2, color = cell)) +
+  geom_point()
+```
+
+There's a lot of overlap here. Perhaps we will better see the difference by examining additional LDs. However, remember that the predictions were less good on the test set so we would expect it to be difficult to distinguish all cells.
+
+```{r lda more}
+# Select the first 5 LDs and pipe in to ggpairs()
+lda_labelled_test %>% 
+  select(LD1:LD5, cell) %>% 
+  ggpairs(aes(color = cell))
 ```
 

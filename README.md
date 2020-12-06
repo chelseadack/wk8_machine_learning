@@ -6,3 +6,4 @@ Week 8 Data Science - machine learning
 - ggpairs
 - pca & plots
 - t-SNE
+- lda & plots, with / without training

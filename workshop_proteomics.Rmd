@@ -23,7 +23,7 @@ knitr::opts_chunk$set(echo = FALSE,
 ```{r packages}
 library(tidyverse)
 library(Rtsne)
-library(bookdown)
+library(caret)
 ```
 
 # Introduction
@@ -31,7 +31,8 @@ Continue work on the Case study of the proteomic data from five immortalised mes
 
 # Methods
 
-Import:
+Import data:
+
 ```{r import}
 file <- "data-raw/sol.txt"
 sol <- read_table2(file)
@@ -40,7 +41,8 @@ names(sol)
 
 We can see that the genename is in the first column.
 
-In order use the genes as variables and the samples as observations, we will need to transpose all the values except the genename:
+In order use the genes as variables and the samples as observations, we will need to transpose all the values except the genename.
+
 ```{r tidy}
 # transpose
 tsol <- sol %>% 
@@ -63,7 +65,7 @@ tsol <- tsol %>%
 
 # Results
 
-Now PCA:
+## PCA of data
 
 ```{r pca}
 pca <- tsol %>% 
@@ -86,7 +88,7 @@ ggplot(pca_labelled, aes(x = PC1, y = PC2, color = lineage)) +
   geom_point()
 ```
 
-Now t-SNE:
+## t-SNE of data
 
 ```{r tsne}
 # because there are very few observations, perplexity must be very low
@@ -103,3 +105,6 @@ dat %>% ggplot(aes(x = X1, y = X2, colour = lineage)) +
 ```
 
 A consistent message of 101.5 being distinctly different is has emerged.
+
+## LDA of data
+
